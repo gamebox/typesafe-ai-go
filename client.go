@@ -9,11 +9,12 @@ import (
 	"time"
 )
 
-var url = `https://api.typesafe.ai/v1/systemone`
+var defaultUrl = `https://api.typesafe.ai/v1/systemone`
 var baseTime = 100 * time.Millisecond
 var ErrTooManyRequests = 429
 var ErrOverloaded = 529
 
+// This error is thrown when no questions have been supplied in a [Request]
 type NoQuestionsErr struct{}
 
 func (err NoQuestionsErr) Error() string {
@@ -22,18 +23,38 @@ func (err NoQuestionsErr) Error() string {
 
 type Client struct {
 	c   *http.Client
+	url string
 	key string
 }
 
+// Creates a new Typesafe API [Client] using a provided valid API key
 func NewClient(key string) *Client {
 	c := Client{
 		key: key,
+		url: defaultUrl,
 		c:   http.DefaultClient,
 	}
 
 	return &c
 }
 
+// Updates the [http.Client] used, the default comes from [http.DefaultClient]
+func (c *Client) WithHttpClient(httpClient *http.Client) {
+	c.c = httpClient
+}
+
+// Updates the url used to access the api, defaults to Typesafe AI's own API
+func (c *Client) WithUrl(url string) {
+	c.url = url
+}
+
+// Send a [Request] to the endpoint. Can return a [NoQuestionsError], or several other
+// errors if the request fails for any reason.
+//
+// This method should handle redirects correctly, and should use exponential backoff
+// when the endpoint returns a 429 or 529 status code.
+//
+// If successful, use the methods of the [Response] to read the answers to your questions
 func (c Client) Ask(req Request) (response Response, err error) {
 	if req.Model == "" {
 		req.Model = ModelLatest
@@ -50,7 +71,7 @@ func (c Client) Ask(req Request) (response Response, err error) {
 		return response, fmt.Errorf("Could not encode request body: %e\n", err)
 	}
 
-	request, err := http.NewRequest("POST", url, strings.NewReader(sb.String()))
+	request, err := http.NewRequest("POST", defaultUrl, strings.NewReader(sb.String()))
 	if err != nil {
 		return response, fmt.Errorf("Could not create request: %e\n", err)
 	}
